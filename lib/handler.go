@@ -105,6 +105,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// Gets the correct user for this request.
 		username, password, ok := r.BasicAuth()
+		lZap.Debug("BasicAuth", zap.String("username", username), zap.String("password", password), zap.String("path", r.URL.Path), zap.String("method", r.Method), zap.String("destination", r.Header.Get("Destination")))
 		if !ok {
 			http.Error(w, "Not authorized", http.StatusUnauthorized)
 			return
@@ -138,10 +139,31 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Checks for user permissions relatively to this PATH.
-	allowed := user.Allowed(req, func(filename string) bool {
-		_, err := user.FileSystem.Stat(r.Context(), filename)
-		return !os.IsNotExist(err)
-	})
+	allowed := true
+	info, err := user.FileSystem.Stat(r.Context(), strings.TrimPrefix(r.URL.Path, user.Prefix))
+	if err == nil && !info.IsDir() {
+		// checks permissions for file
+		if !user.AllowedFile(req, func(filename string) bool {
+			_, err := user.FileSystem.Stat(r.Context(), filename)
+			return !os.IsNotExist(err)
+		}) {
+			allowed = false
+		}
+
+		// checks permissions for directory
+		// if r.Method == "PUT" {
+		// 	allowed = user.Allowed(req, func(filename string) bool {
+		// 		_, err := user.FileSystem.Stat(r.Context(), filename)
+		// 		return !os.IsNotExist(err)
+		// 	})
+		// }
+
+	} else {
+		allowed = user.Allowed(req, func(filename string) bool {
+			_, err := user.FileSystem.Stat(r.Context(), filename)
+			return !os.IsNotExist(err)
+		})
+	}
 
 	lZap.Debug("allowed & method & path", zap.Bool("allowed", allowed), zap.String("method", r.Method), zap.String("path", r.URL.Path))
 

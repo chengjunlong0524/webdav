@@ -80,6 +80,7 @@ func ParseConfig(filename string, flags *pflag.FlagSet) (*Config, error) {
 	v.SetDefault("RulesBehavior", RulesOverwrite)
 	v.SetDefault("Directory", ".")
 	v.SetDefault("Permissions", "R")
+	v.SetDefault("FileAllowed", "none")
 	v.SetDefault("Debug", false)
 	v.SetDefault("NoSniff", false)
 	v.SetDefault("NoPassword", false)
@@ -116,6 +117,10 @@ func ParseConfig(filename string, flags *pflag.FlagSet) (*Config, error) {
 
 		if !v.IsSet(fmt.Sprintf("Users.%d.Permissions", i)) {
 			cfg.Users[i].Permissions = cfg.Permissions
+		}
+
+		if !v.IsSet(fmt.Sprintf("Users.%d.FileAllowed", i)) {
+			cfg.Users[i].FileAllowed = cfg.FileAllowed
 		}
 
 		if !v.IsSet(fmt.Sprintf("Users.%d.RulesBehavior", i)) {

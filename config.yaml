@@ -23,12 +23,13 @@ behindProxy: false
 # The directory that will be able to be accessed by the users when connecting.
 # This directory will be used by users unless they have their own 'directory' defined.
 # Default is '.' (current directory).
-directory: .
+directory: /webdav
 
 # The default permissions for users. This is a case insensitive option. Possible
 # permissions: C (Create), R (Read), U (Update), D (Delete). You can combine multiple
 # permissions. For example, to allow to read and create, set "RC". Default is "R".
 permissions: R
+fileallowed: none
 
 # The default permissions rules for users. Default is none. Rules are applied
 # from last to first, that is, the first rule that matches the request, starting
@@ -59,7 +60,7 @@ log:
 # CORS configuration
 cors:
   # Whether or not CORS configuration should be applied. Default is 'false'.
-  enabled: true
+  enabled: false
   credentials: true
   allowed_headers:
     - Depth
@@ -83,28 +84,22 @@ users:
   # Example 'admin' user with plaintext password.
   - username: admin
     password: admin
-  # Example 'john' user with bcrypt encrypted password, with custom directory.
-  # You can generate a bcrypt-encrypted password by using the 'webdav bcrypt'
-  # command lint utility.
-  - username: john
-    password: "{bcrypt}$2y$10$zEP6oofmXFeHaeMfBNLnP.DO8m.H.Mwhd24/TOX2MWLxAExXi4qgi"
-    directory: /another/path
-  # Example user whose details will be picked up from the environment.
-  - username: "{env}ENV_USERNAME"
-    password: "{env}ENV_PASSWORD"
-  - username: basic
-    password: basic
-    # Override default permissions.
-    permissions: CRUD
+    directory: /webdav
+    permissions: R
+    fileallowed: none
     rules:
       # With this rule, the user CANNOT access {user directory}/some/files.
-      - path: /some/file
-        permissions: none
-      # With this rule, the user CAN create, read, update and delete within
-      # {user directory}/public/access.
-      - path: /public/access/
-        permissions: CRUD
-      # With this rule, the user CAN read and update all files ending with .js.
-      # It uses a regular expression.
-      - regex: "^.+.js$"
-        permissions: RU
+      # - path: /
+      #   permissions: R
+      # - path: /01
+      #   permissions: C
+      #   fileallowed: none  
+      # - path: /02
+      #   permissions: CR
+      #   fileallowed: none
+      # - path: /03
+      #   permissions: CRU
+      #   fileallowed: none
+      # - path: /04
+      #   permissions: CRUD
+      #   fileallowed: none

@@ -6,12 +6,29 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 type Rule struct {
 	Permissions Permissions
 	Path        string
 	Regex       *regexp.Regexp
+	FileAllowed Permissions
+}
+
+func (r *Rule) ToString() string {
+	var ret string
+
+	ret = ""
+	if r.Path != "" {
+		ret += r.Path
+	} else if r.Regex != nil {
+		ret += r.Regex.String()
+	}
+
+	ret = ret + " " + r.Permissions.ToString() + "-" + r.FileAllowed.ToString()
+	return ret
 }
 
 func (r *Rule) Validate() error {
@@ -45,12 +62,53 @@ const (
 type UserPermissions struct {
 	Directory     string
 	Permissions   Permissions
+	FileAllowed   Permissions
 	Rules         []*Rule
 	RulesBehavior RulesBehavior
 }
 
+// Allowed checks if the user has permission to access a file
+func (p UserPermissions) AllowedFile(r *request, fileExists func(string) bool) bool {
+	var Paths []string
+	for i := 0; i < len(p.Rules); i++ {
+		Paths = append(Paths, p.Rules[i].ToString())
+	}
+	zap.L().Debug("AllowedFile", zap.String("Directory", p.Directory+" "+p.Permissions.ToString()+"-"+p.FileAllowed.ToString()))
+	zap.L().Debug("AllowedFile", zap.String("Rules", strings.Join(Paths, "; ")))
+
+	for i := len(p.Rules) - 1; i >= 0; i-- {
+		if p.Rules[i].Matches(r.path) {
+			if !p.Rules[i].FileAllowed.Allowed(r, fileExists) {
+				zap.L().Info("AllowedFile " + r.path + " not allowed in Rules " + p.Rules[i].ToString())
+				return false
+			}
+
+			zap.L().Info("AllowedFile " + r.path + " allowed in Rules " + p.Rules[i].ToString())
+			return true
+		}
+	}
+
+	stat := p.FileAllowed.Allowed(r, fileExists)
+	if !stat {
+		zap.L().Info("AllowedFile " + r.path + " not allowed in Permissions " + p.Directory + " " + p.Permissions.ToString() + "-" + p.FileAllowed.ToString())
+		return false
+	}
+
+	zap.L().Info("AllowedFile " + r.path + " allowed in Permissions " + p.Directory + " " + p.Permissions.ToString() + "-" + p.FileAllowed.ToString())
+	return stat
+}
+
 // Allowed checks if the user has permission to access a directory/file
 func (p UserPermissions) Allowed(r *request, fileExists func(string) bool) bool {
+
+	var Paths []string
+	for i := 0; i < len(p.Rules); i++ {
+		Paths = append(Paths, p.Rules[i].ToString())
+	}
+
+	zap.L().Debug("Allowed", zap.String("Directory", p.Directory+" "+p.Permissions.ToString()+"-"+p.FileAllowed.ToString()))
+	zap.L().Debug("Allowed", zap.String("Rules", strings.Join(Paths, "; ")))
+
 	// For COPY and MOVE requests, we first check the permissions for the destination
 	// path. As soon as a rule matches and does not allow the operation at the destination,
 	// we fail immediately. If no rule matches, we check the global permissions.
@@ -62,15 +120,18 @@ func (p UserPermissions) Allowed(r *request, fileExists func(string) bool) bool 
 			if p.Rules[i].Matches(dst) {
 				ruleMatched = true
 				if !p.Rules[i].Permissions.AllowedDestination(r, fileExists) {
+					zap.L().Info("Allowed COPY|MOVE " + dst + " not allowed in Rules " + p.Rules[i].ToString())
 					return false
 				}
 
 				// Only check the first rule that matches, similarly to the source rules.
+				zap.L().Info("Allowed COPY|MOVE " + dst + " allowed in Rules " + p.Rules[i].ToString())
 				break
 			}
 		}
 
 		if !ruleMatched && !p.Permissions.AllowedDestination(r, fileExists) {
+			zap.L().Info("Allowed COPY|MOVE " + dst + " not allowed in Permissions " + p.Directory + " " + p.Permissions.ToString())
 			return false
 		}
 	}
@@ -79,10 +140,25 @@ func (p UserPermissions) Allowed(r *request, fileExists func(string) bool) bool 
 	// the source. The first matched rule returns.
 	for i := len(p.Rules) - 1; i >= 0; i-- {
 		if p.Rules[i].Matches(r.path) {
-			return p.Rules[i].Permissions.Allowed(r, fileExists)
+			//zap.L().Debug("Allowed COPY|MOVE " + r.path + " not allowed in Rules " + p.Rules[i].ToString())
+			//return p.Rules[i].Permissions.Allowed(r, fileExists)
+
+			if !p.Rules[i].Permissions.Allowed(r, fileExists) {
+				zap.L().Info("Allowed " + r.path + " not allowed in Rules " + p.Rules[i].ToString())
+				return false
+			}
+
+			zap.L().Info("Allowed " + r.path + " allowed in Rules " + p.Rules[i].ToString())
+			return true
 		}
 	}
 
+	stat := p.Permissions.Allowed(r, fileExists)
+	if !stat {
+		zap.L().Info("Allowed " + r.path + " not allowed in Permissions " + p.Directory + " " + p.Permissions.ToString() + "-" + p.FileAllowed.ToString())
+	}
+
+	zap.L().Info("Allowed " + r.path + " allowed in Permissions " + p.Directory + " " + p.Permissions.ToString() + "-" + p.FileAllowed.ToString())
 	return p.Permissions.Allowed(r, fileExists)
 }
 
@@ -115,6 +191,37 @@ type Permissions struct {
 	Read   bool
 	Update bool
 	Delete bool
+}
+
+func (p *Permissions) ToString() string {
+	var ret string
+
+	//ret = "CRUD="
+	if p.Create {
+		ret += "C"
+	} else {
+		ret += "X"
+	}
+
+	if p.Read {
+		ret += "R"
+	} else {
+		ret += "X"
+	}
+
+	if p.Update {
+		ret += "U"
+	} else {
+		ret += "X"
+	}
+
+	if p.Delete {
+		ret += "D"
+	} else {
+		ret += "X"
+	}
+
+	return ret
 }
 
 func (p *Permissions) UnmarshalText(data []byte) error {
