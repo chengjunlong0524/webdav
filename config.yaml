@@ -84,6 +84,7 @@ users:
   # Example 'admin' user with plaintext password.
   - username: admin
     password: admin
+    expiredate: 2099-12-31
     directory: /webdav
     permissions: R
     fileallowed: none

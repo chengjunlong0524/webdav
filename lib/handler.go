@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/rs/cors"
 	"go.uber.org/zap"
@@ -20,6 +21,33 @@ type Handler struct {
 	behindProxy bool
 	user        *handlerUser
 	users       map[string]*handlerUser
+}
+
+var timeTemplates = []string{
+	"2006-01-02 15:04:05",
+	"2006/01/02 15:04:05",
+	"2006-01-02",
+	"2006/01/02",
+}
+
+func TimeStringToGoTime(tm string) time.Time {
+	for i := range timeTemplates {
+		t, err := time.Parse(timeTemplates[i], tm)
+		if nil == err && !t.IsZero() {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
+func TimeStringToGoTimeLocation(tm string, location *time.Location) time.Time {
+	for i := range timeTemplates {
+		t, err := time.ParseInLocation(timeTemplates[i], tm, location)
+		if nil == err && !t.IsZero() {
+			return t
+		}
+	}
+	return time.Time{}
 }
 
 func NewHandler(c *Config) (http.Handler, error) {
@@ -115,14 +143,22 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			// Log invalid username
 			lZap.Info("invalid username", zap.String("username", username))
-			http.Error(w, "Not authorized", http.StatusUnauthorized)
+			http.Error(w, "Not authorized, invalid username", http.StatusUnauthorized)
 			return
 		}
 
 		if !h.noPassword && !user.checkPassword(password) {
 			// Log invalid password
 			lZap.Info("invalid password", zap.String("username", username))
-			http.Error(w, "Not authorized", http.StatusUnauthorized)
+			http.Error(w, "Not authorized, invalid password", http.StatusUnauthorized)
+			return
+		}
+
+		// check if account is expired
+		if !user.ExpireDate.IsZero() && time.Now().After(user.ExpireDate) {
+			// Log expired account
+			lZap.Info(" expired account", zap.String("username", username))
+			http.Error(w, "Not authorized, expired account", http.StatusUnauthorized)
 			return
 		}
 

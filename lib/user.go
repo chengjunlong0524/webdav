@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -13,6 +14,7 @@ type User struct {
 	UserPermissions `mapstructure:",squash"`
 	Username        string
 	Password        string
+	ExpireDate      time.Time
 }
 
 func (u User) checkPassword(input string) bool {
